@@ -1,6 +1,4 @@
-import React from 'react';
-
-export function AnimatedBackground() {
+export default function AnimatedBackground() {
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none bg-slate-950">
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-600/20 blur-[120px] animate-pulse"></div>
