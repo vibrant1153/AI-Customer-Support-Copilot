@@ -10,6 +10,7 @@ type Document = {
   file_size: number | null;
   status: string;
   created_at: string;
+  chunk_count?: number;
 };
 
 function formatBytes(bytes: number | null) {
@@ -79,9 +80,42 @@ export default function KnowledgeBaseUploader({
       }
 
       setDocuments((prev) => [row as Document, ...prev]);
+
+      // 3. Trigger Phase 3 processing (text extraction + chunking)
+      processDocument(row.id);
     }
 
     setUploading(false);
+  };
+
+  const processDocument = async (documentId: string) => {
+    try {
+      const res = await fetch('/api/process-document', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ documentId }),
+      });
+      const result = await res.json();
+
+      if (!res.ok) {
+        setDocuments((prev) =>
+          prev.map((d) => (d.id === documentId ? { ...d, status: 'failed' } : d))
+        );
+        setError(`Processing failed: ${result.error}`);
+        return;
+      }
+
+      setDocuments((prev) =>
+        prev.map((d) =>
+          d.id === documentId ? { ...d, status: 'ready', chunk_count: result.chunkCount } : d
+        )
+      );
+    } catch {
+      setDocuments((prev) =>
+        prev.map((d) => (d.id === documentId ? { ...d, status: 'failed' } : d))
+      );
+      setError('Processing failed: network error.');
+    }
   };
 
   const handleDelete = async (doc: Document) => {
@@ -163,6 +197,7 @@ export default function KnowledgeBaseUploader({
                     <p className="text-sm font-medium text-white truncate">{doc.filename}</p>
                     <p className="text-xs text-slate-500">
                       {new Date(doc.created_at).toLocaleDateString()} · {formatBytes(doc.file_size)}
+                      {doc.status === 'ready' && doc.chunk_count ? ` · ${doc.chunk_count} chunks` : ''}
                     </p>
                   </div>
                 </div>
