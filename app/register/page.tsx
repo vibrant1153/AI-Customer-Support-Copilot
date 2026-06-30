@@ -44,6 +44,19 @@ export default function RegisterPage() {
 
     const userId = signUpData.user.id;
 
+    // signUp() can resolve slightly before the session is fully attached
+    // to the client. Explicitly confirm we have an active session before
+    // touching any RLS-protected table — otherwise inserts below get
+    // rejected as "unauthenticated" even though signup just succeeded.
+    if (!signUpData.session) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        setError('Account created, but session was not established. Please try logging in.');
+        setLoading(false);
+        return;
+      }
+    }
+
     // 2. Create their organization
     const { data: org, error: orgError } = await supabase
       .from('organizations')
