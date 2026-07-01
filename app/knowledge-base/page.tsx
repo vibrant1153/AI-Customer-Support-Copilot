@@ -16,7 +16,16 @@ export default async function KnowledgeBasePage() {
     .eq('id', user.id)
     .single();
 
-  if (!profile?.org_id) redirect('/login');
+  if (!profile?.org_id) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-200">
+        <div className="text-center">
+          <p className="text-xl font-bold text-white mb-2">No organization found</p>
+          <p className="text-slate-400">Your profile isn&apos;t linked to an organization yet. Try logging out and back in.</p>
+        </div>
+      </div>
+    );
+  }
 
   const userName = profile.full_name ?? 'Agent';
   const orgName = (profile.organizations as { name: string } | null)?.name ?? 'Your Workspace';

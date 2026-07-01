@@ -1,4 +1,4 @@
-import pdfParse from 'pdf-parse';
+import { pdf } from 'pdf-parse';
 
 // Extracts plain text from a file buffer, based on its mime type.
 // Returns an empty string (rather than throwing) for unsupported
@@ -9,7 +9,7 @@ export async function extractText(buffer: Buffer, mimeType: string): Promise<str
   }
 
   if (mimeType === 'application/pdf') {
-    const result = await pdfParse(buffer);
+    const result = await pdf(buffer);
     return result.text;
   }
 
