@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sparkles, ChevronRight, Building, User, Mail, Lock } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 
 const AnimatedBackground = () => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none bg-slate-950">
@@ -15,7 +14,6 @@ const AnimatedBackground = () => (
 
 export default function RegisterPage() {
   const router = useRouter();
-  const supabase = createClient();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -25,61 +23,24 @@ export default function RegisterPage() {
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
-    const orgName = formData.get('orgName') as string;
-    const fullName = formData.get('name') as string;
-    const email = formData.get('email') as string;
-    const password = formData.get('password') as string;
 
-    // 1. Create the auth user
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
+    // Call the server-side API route instead of doing DB inserts
+    // directly from the browser — this fixes the RLS timing issue.
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        orgName: formData.get('orgName'),
+        fullName: formData.get('name'),
+        email: formData.get('email'),
+        password: formData.get('password'),
+      }),
     });
 
-    if (signUpError || !signUpData.user) {
-      setError(signUpError?.message ?? 'Could not create account.');
-      setLoading(false);
-      return;
-    }
+    const result = await res.json();
 
-    const userId = signUpData.user.id;
-
-    // signUp() can resolve slightly before the session is fully attached
-    // to the client. Explicitly confirm we have an active session before
-    // touching any RLS-protected table — otherwise inserts below get
-    // rejected as "unauthenticated" even though signup just succeeded.
-    if (!signUpData.session) {
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData.session) {
-        setError('Account created, but session was not established. Please try logging in.');
-        setLoading(false);
-        return;
-      }
-    }
-
-    // 2. Create their organization
-    const { data: org, error: orgError } = await supabase
-      .from('organizations')
-      .insert({ name: orgName })
-      .select()
-      .single();
-
-    if (orgError || !org) {
-      setError(orgError?.message ?? 'Could not create organization.');
-      setLoading(false);
-      return;
-    }
-
-    // 3. Create their profile, linking the user to the new org
-    const { error: profileError } = await supabase.from('profiles').insert({
-      id: userId,
-      org_id: org.id,
-      full_name: fullName,
-      email,
-    });
-
-    if (profileError) {
-      setError(profileError.message);
+    if (!res.ok) {
+      setError(result.error ?? 'Something went wrong.');
       setLoading(false);
       return;
     }
