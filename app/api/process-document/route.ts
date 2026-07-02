@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { extractText } from '@/lib/processing/extractText';
 import { chunkText } from '@/lib/processing/chunkText';
+import { embedChunks } from '@/lib/processing/embedChunks';
+
+function getAdminClient() {
+  return createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 // POST /api/process-document
 // Body: { documentId: string }
@@ -69,10 +78,29 @@ export async function POST(request: NextRequest) {
       content,
     }));
 
-    const { error: insertError } = await supabase.from('document_chunks').insert(rows);
+    const { data: savedChunks, error: insertError } = await supabase
+      .from('document_chunks')
+      .insert(rows)
+      .select('id, content');
     if (insertError) throw new Error(insertError.message);
+    if (!savedChunks) throw new Error('Chunks were not returned after insert');
 
-    // 5. Mark the document as ready
+    // 5. Embed each chunk (single batched Gemini call) and write the
+    // vectors back. Uses the admin client since RLS otherwise scopes
+    // writes to the requesting user's session, and this is a
+    // background/system write triggered by the upload flow.
+    const admin = getAdminClient();
+    const embedded = await embedChunks(
+      savedChunks.map((c) => ({ id: c.id, content: c.content }))
+    );
+
+    await Promise.all(
+      embedded.map((e) =>
+        admin.from('document_chunks').update({ embedding: e.embedding }).eq('id', e.id)
+      )
+    );
+
+    // 6. Mark the document as ready
     await supabase.from('documents').update({ status: 'ready' }).eq('id', doc.id);
 
     return NextResponse.json({ success: true, chunkCount: chunks.length });

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { UploadCloud, FileText, Trash2, CheckCircle2, Loader2 } from 'lucide-react';
+import { UploadCloud, FileText, Trash2, CheckCircle2, Loader2, RefreshCw } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 type Document = {
@@ -118,6 +118,14 @@ export default function KnowledgeBaseUploader({
     }
   };
 
+  const handleRetry = (documentId: string) => {
+    setDocuments((prev) =>
+      prev.map((d) => (d.id === documentId ? { ...d, status: 'processing' } : d))
+    );
+    setError(null);
+    processDocument(documentId);
+  };
+
   const handleDelete = async (doc: Document) => {
     await supabase.from('documents').delete().eq('id', doc.id);
     setDocuments((prev) => prev.filter((d) => d.id !== doc.id));
@@ -213,6 +221,15 @@ export default function KnowledgeBaseUploader({
                     {doc.status === 'processing' && <Loader2 size={12} className="animate-spin" />}
                     {doc.status}
                   </span>
+                  {(doc.status === 'failed' || doc.status === 'processing') && (
+                    <button
+                      onClick={() => handleRetry(doc.id)}
+                      title="Retry processing"
+                      className="text-slate-500 hover:text-blue-400 transition-colors"
+                    >
+                      <RefreshCw size={16} />
+                    </button>
+                  )}
                   <button onClick={() => handleDelete(doc)} className="text-slate-500 hover:text-red-400 transition-colors">
                     <Trash2 size={16} />
                   </button>
