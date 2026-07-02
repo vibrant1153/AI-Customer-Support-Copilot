@@ -44,6 +44,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Document not found' }, { status: 404 });
   }
 
+  // Reset to 'processing' up front — matters for retries, since this
+  // document may currently be sitting at 'failed' or a stuck 'processing'.
+  await supabase.from('documents').update({ status: 'processing' }).eq('id', doc.id);
+
   try {
     // 1. Download the raw file bytes from Storage
     const { data: fileBlob, error: downloadError } = await supabase.storage
@@ -70,7 +74,16 @@ export async function POST(request: NextRequest) {
     // 3. Split into chunks
     const chunks = chunkText(text);
 
-    // 4. Save chunks to the database
+    // 4. Clear any chunks from a previous/interrupted run of this same
+    // document, then save the fresh set. This makes the whole route safe
+    // to call more than once for the same documentId (manual retry, or a
+    // request that got interrupted partway through last time).
+    const { error: clearError } = await supabase
+      .from('document_chunks')
+      .delete()
+      .eq('document_id', doc.id);
+    if (clearError) throw new Error(clearError.message);
+
     const rows = chunks.map((content, index) => ({
       document_id: doc.id,
       org_id: doc.org_id,
