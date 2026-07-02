@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sparkles, ChevronRight, Building, User, Mail, Lock } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 const AnimatedBackground = () => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none bg-slate-950">
@@ -14,6 +15,7 @@ const AnimatedBackground = () => (
 
 export default function RegisterPage() {
   const router = useRouter();
+  const supabase = createClient();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -23,24 +25,31 @@ export default function RegisterPage() {
     setLoading(true);
 
     const formData = new FormData(e.currentTarget);
+    const orgName  = formData.get('orgName') as string;
+    const fullName = formData.get('name') as string;
+    const email    = formData.get('email') as string;
+    const password = formData.get('password') as string;
 
-    // Call the server-side API route instead of doing DB inserts
-    // directly from the browser — this fixes the RLS timing issue.
-    const res = await fetch('/api/auth/register', {
+    // Step 1: Browser handles signUp — sets the session cookie immediately.
+    const { error: signUpError } = await supabase.auth.signUp({ email, password });
+    if (signUpError) {
+      setError(signUpError.message);
+      setLoading(false);
+      return;
+    }
+
+    // Step 2: Session cookie is now set. Call the server route to do
+    // the DB inserts — the server reads that cookie and is guaranteed
+    // to see an authenticated user, no race condition.
+    const res = await fetch('/api/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        orgName: formData.get('orgName'),
-        fullName: formData.get('name'),
-        email: formData.get('email'),
-        password: formData.get('password'),
-      }),
+      body: JSON.stringify({ orgName, fullName, email }),
     });
 
     const result = await res.json();
-
     if (!res.ok) {
-      setError(result.error ?? 'Something went wrong.');
+      setError(result.error ?? 'Could not create workspace.');
       setLoading(false);
       return;
     }

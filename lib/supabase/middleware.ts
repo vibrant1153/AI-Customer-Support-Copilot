@@ -1,8 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-// Keeps the Supabase session fresh on every request, and redirects
-// logged-out users away from protected pages (like /dashboard).
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
@@ -29,18 +27,25 @@ export async function updateSession(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const isAuthPage =
-    request.nextUrl.pathname.startsWith('/login') ||
-    request.nextUrl.pathname.startsWith('/register');
+  const pathname = request.nextUrl.pathname;
 
-  // Not logged in and trying to reach a protected page -> bounce to /login
-  if (!user && !isAuthPage) {
+  // API routes handle their own authentication — never redirect them.
+  // Without this, POST /api/auth/register gets bounced to /login
+  // because the session cookie hasn't propagated yet at that moment.
+  const isApiRoute = pathname.startsWith('/api/');
+
+  const isAuthPage =
+    pathname.startsWith('/login') ||
+    pathname.startsWith('/register');
+
+  // Not logged in, not on an auth page, not an API route → bounce to login
+  if (!user && !isAuthPage && !isApiRoute) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
 
-  // Already logged in and trying to reach login/register -> send to dashboard
+  // Already logged in and trying to reach login/register → send to dashboard
   if (user && isAuthPage) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';

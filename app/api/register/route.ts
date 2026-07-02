@@ -1,37 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createClient as createAdminClient } from '@supabase/supabase-js';
 
-// POST /api/auth/register
-// Handles the full registration flow on the server where the session
-// is always reliably established before any DB inserts happen.
+// Admin client uses the service role key — bypasses RLS entirely.
+// ONLY used server-side, never exposed to the browser.
+function getAdminClient() {
+  return createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
+
 export async function POST(request: NextRequest) {
-  const { orgName, fullName, email, password } = await request.json();
+  const { orgName, fullName, email } = await request.json();
 
-  if (!orgName || !fullName || !email || !password) {
-    return NextResponse.json({ error: 'All fields are required.' }, { status: 400 });
-  }
-
+  // Verify the user is actually authenticated via their session cookie
   const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-  // 1. Create the auth user
-  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-    email,
-    password,
-  });
-
-  if (signUpError || !signUpData.user) {
-    return NextResponse.json(
-      { error: signUpError?.message ?? 'Could not create account.' },
-      { status: 400 }
-    );
+  if (!user) {
+    return NextResponse.json({ error: 'Not authenticated.' }, { status: 401 });
   }
 
-  const userId = signUpData.user.id;
+  // Use the admin client for DB inserts — bypasses RLS so the
+  // newly-created user can insert their first org row without
+  // the JWT/RLS timing issue.
+  const admin = getAdminClient();
 
-  // 2. Create the organization
-  // Using server client means the session is fully available here —
-  // no race condition like the browser client had.
-  const { data: org, error: orgError } = await supabase
+  const { data: org, error: orgError } = await admin
     .from('organizations')
     .insert({ name: orgName })
     .select()
@@ -44,9 +40,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // 3. Create the profile linking user → org
-  const { error: profileError } = await supabase.from('profiles').insert({
-    id: userId,
+  const { error: profileError } = await admin.from('profiles').insert({
+    id: user.id,
     org_id: org.id,
     full_name: fullName,
     email,
