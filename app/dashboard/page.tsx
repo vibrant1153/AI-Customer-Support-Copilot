@@ -18,7 +18,7 @@ export default async function DashboardPage() {
     .single();
 
   const userName = profile?.full_name ?? 'Agent';
-  const orgName = (profile?.organizations as { name: string } | null)?.name ?? 'Your Workspace';
+  const orgName = (profile?.organizations as unknown as { name: string } | null)?.name ?? 'Your Workspace';
 
   return (
     <div className="min-h-screen bg-slate-950 flex font-sans text-slate-200 relative overflow-hidden">
