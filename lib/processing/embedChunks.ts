@@ -42,3 +42,29 @@ export async function embedChunks(
     embedding: item.values ?? [],
   }));
 }
+
+/**
+ * Embeds a single piece of text — e.g. a customer email body — for use as
+ * a SEARCH QUERY against already-embedded document chunks.
+ *
+ * taskType: RETRIEVAL_QUERY (not RETRIEVAL_DOCUMENT) matters here: Gemini
+ * tunes the vector differently depending on which side of the search it's
+ * embedding. Using the wrong task type still "works" but measurably hurts
+ * retrieval ranking quality.
+ */
+export async function embedQuery(text: string): Promise<number[]> {
+  const response = await ai.models.embedContent({
+    model: 'gemini-embedding-001',
+    contents: [text],
+    config: {
+      taskType: 'RETRIEVAL_QUERY',
+      outputDimensionality: 768,
+    },
+  });
+
+  const vector = response.embeddings?.[0]?.values;
+  if (!vector) {
+    throw new Error('Gemini returned no embedding for the query');
+  }
+  return vector;
+}

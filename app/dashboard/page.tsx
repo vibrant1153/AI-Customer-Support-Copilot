@@ -4,6 +4,8 @@ import { Library, Cpu } from 'lucide-react';
 import AnimatedBackground from '@/components/AnimatedBackground';
 import Sidebar from '@/components/Sidebar';
 
+
+
 export default async function DashboardPage() {
   const supabase = await createClient();
 
