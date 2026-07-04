@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Mail, Clock, CheckCircle2, Loader2, CircleDot, Sparkles, RefreshCw } from 'lucide-react';
+import { Mail, Clock, CheckCircle2, Loader2, CircleDot, Sparkles, RefreshCw, XCircle, Pencil } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 type EmailStatus = 'new' | 'in_progress' | 'resolved';
@@ -21,6 +21,7 @@ type AiDraft = {
   draft_body: string;
   confidence_score: number;
   reasoning: string | null;
+  status: 'pending' | 'approved' | 'rejected';
 };
 
 function timeAgo(dateStr: string) {
@@ -80,7 +81,9 @@ export default function InboxClient({ initialEmails }: { initialEmails: Customer
   const [emails, setEmails] = useState<CustomerEmail[]>(initialEmails);
   const [selectedId, setSelectedId] = useState<string | null>(initialEmails[0]?.id ?? null);
   const [drafts, setDrafts] = useState<Record<string, AiDraft>>({});
+  const [editedBody, setEditedBody] = useState<Record<string, string>>({});
   const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
 
   const selected = emails.find((e) => e.id === selectedId) ?? null;
@@ -98,10 +101,44 @@ export default function InboxClient({ initialEmails }: { initialEmails: Customer
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Failed to generate draft');
       setDrafts((prev) => ({ ...prev, [emailId]: data.draft }));
+      setEditedBody((prev) => ({ ...prev, [emailId]: data.draft.draft_body }));
     } catch (err) {
       setDraftError(err instanceof Error ? err.message : 'Failed to generate draft');
     } finally {
       setGeneratingId(null);
+    }
+  };
+
+  const handleDraftAction = async (emailId: string, action: 'approved' | 'rejected') => {
+    const draft = drafts[emailId];
+    if (!draft) return;
+
+    setActionId(emailId);
+    setDraftError(null);
+    try {
+      const res = await fetch(`/api/drafts/${draft.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: action,
+          draft_body: editedBody[emailId],
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? `Failed to ${action === 'approved' ? 'approve' : 'reject'} draft`);
+      setDrafts((prev) => ({ ...prev, [emailId]: data.draft }));
+
+      // Approving mirrors the same 'in_progress' transition the server
+      // already applied to customer_emails, so the list badge stays in sync.
+      if (action === 'approved') {
+        setEmails((prev) =>
+          prev.map((e) => (e.id === emailId ? { ...e, status: 'in_progress' } : e))
+        );
+      }
+    } catch (err) {
+      setDraftError(err instanceof Error ? err.message : 'Action failed');
+    } finally {
+      setActionId(null);
     }
   };
 
@@ -238,29 +275,75 @@ export default function InboxClient({ initialEmails }: { initialEmails: Customer
                       <Sparkles size={14} className="text-purple-400" />
                       AI Draft Reply
                     </div>
-                    <ConfidenceBadge score={selectedDraft.confidence_score} />
+                    <div className="flex items-center gap-2">
+                      {selectedDraft.status === 'approved' && (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-green-500/10 text-green-400">
+                          <CheckCircle2 size={12} /> Approved
+                        </span>
+                      )}
+                      {selectedDraft.status === 'rejected' && (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-red-500/10 text-red-400">
+                          <XCircle size={12} /> Rejected
+                        </span>
+                      )}
+                      <ConfidenceBadge score={selectedDraft.confidence_score} />
+                    </div>
                   </div>
 
-                  <p className="text-slate-200 leading-relaxed whitespace-pre-wrap mb-3">
-                    {selectedDraft.draft_body}
-                  </p>
+                  {selectedDraft.status === 'pending' ? (
+                    <div className="flex items-start gap-2 mb-3">
+                      <Pencil size={13} className="text-slate-500 mt-1 flex-shrink-0" />
+                      <textarea
+                        value={editedBody[selected.id] ?? selectedDraft.draft_body}
+                        onChange={(e) =>
+                          setEditedBody((prev) => ({ ...prev, [selected.id]: e.target.value }))
+                        }
+                        rows={6}
+                        className="w-full bg-slate-900/50 border border-slate-700 rounded-xl p-3 text-slate-200 leading-relaxed text-sm resize-none focus:outline-none focus:border-blue-500/50"
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-slate-200 leading-relaxed whitespace-pre-wrap mb-3">
+                      {selectedDraft.draft_body}
+                    </p>
+                  )}
 
                   {selectedDraft.reasoning && (
                     <p className="text-xs text-slate-500 italic mb-4">{selectedDraft.reasoning}</p>
                   )}
 
-                  <button
-                    onClick={() => handleGenerateDraft(selected.id)}
-                    disabled={generatingId === selected.id}
-                    className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-50"
-                  >
-                    {generatingId === selected.id ? (
-                      <Loader2 size={12} className="animate-spin" />
-                    ) : (
-                      <RefreshCw size={12} />
+                  <div className="flex items-center gap-3">
+                    {selectedDraft.status === 'pending' && (
+                      <>
+                        <button
+                          onClick={() => handleDraftAction(selected.id, 'approved')}
+                          disabled={actionId === selected.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:opacity-90 transition-opacity disabled:opacity-50"
+                        >
+                          <CheckCircle2 size={13} /> Approve
+                        </button>
+                        <button
+                          onClick={() => handleDraftAction(selected.id, 'rejected')}
+                          disabled={actionId === selected.id}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-50"
+                        >
+                          <XCircle size={13} /> Reject
+                        </button>
+                      </>
                     )}
-                    Regenerate
-                  </button>
+                    <button
+                      onClick={() => handleGenerateDraft(selected.id)}
+                      disabled={generatingId === selected.id}
+                      className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-50"
+                    >
+                      {generatingId === selected.id ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <RefreshCw size={12} />
+                      )}
+                      Regenerate
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
