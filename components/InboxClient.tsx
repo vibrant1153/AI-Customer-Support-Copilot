@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Mail, Clock, CheckCircle2, Loader2, CircleDot } from 'lucide-react';
+import { Mail, Clock, CheckCircle2, Loader2, CircleDot, Sparkles, RefreshCw } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 type EmailStatus = 'new' | 'in_progress' | 'resolved';
@@ -14,6 +14,13 @@ type CustomerEmail = {
   body: string;
   status: EmailStatus;
   created_at: string;
+};
+
+type AiDraft = {
+  id: string;
+  draft_body: string;
+  confidence_score: number;
+  reasoning: string | null;
 };
 
 function timeAgo(dateStr: string) {
@@ -54,12 +61,49 @@ function StatusBadge({ status }: { status: EmailStatus }) {
   );
 }
 
+function ConfidenceBadge({ score }: { score: number }) {
+  const classes =
+    score > 80
+      ? 'bg-green-500/10 text-green-400'
+      : score >= 50
+      ? 'bg-yellow-500/10 text-yellow-400'
+      : 'bg-red-500/10 text-red-400';
+  return (
+    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${classes}`}>
+      {score}% confidence
+    </span>
+  );
+}
+
 export default function InboxClient({ initialEmails }: { initialEmails: CustomerEmail[] }) {
   const supabase = createClient();
   const [emails, setEmails] = useState<CustomerEmail[]>(initialEmails);
   const [selectedId, setSelectedId] = useState<string | null>(initialEmails[0]?.id ?? null);
+  const [drafts, setDrafts] = useState<Record<string, AiDraft>>({});
+  const [generatingId, setGeneratingId] = useState<string | null>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
 
   const selected = emails.find((e) => e.id === selectedId) ?? null;
+  const selectedDraft = selected ? drafts[selected.id] : null;
+
+  const handleGenerateDraft = async (emailId: string) => {
+    setGeneratingId(emailId);
+    setDraftError(null);
+    try {
+      const res = await fetch('/api/generate-draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emailId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Failed to generate draft');
+      setDrafts((prev) => ({ ...prev, [emailId]: data.draft }));
+    } catch (err) {
+      setDraftError(err instanceof Error ? err.message : 'Failed to generate draft');
+    } finally {
+      setGeneratingId(null);
+    }
+  };
 
   const handleSelect = (email: CustomerEmail) => {
     setSelectedId(email.id);
@@ -166,8 +210,60 @@ export default function InboxClient({ initialEmails }: { initialEmails: Customer
               )}
             </div>
 
-            {/* Phase 7 will insert the AI draft generator here, below the
-                original email — reading this same `selected` email. */}
+            {/* AI Draft */}
+            <div className="mt-2">
+              {draftError && (
+                <p className="text-sm text-red-400 mb-3">{draftError}</p>
+              )}
+
+              {!selectedDraft && (
+                <button
+                  onClick={() => handleGenerateDraft(selected.id)}
+                  disabled={generatingId === selected.id}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10 transition-colors disabled:opacity-50"
+                >
+                  {generatingId === selected.id ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Sparkles size={14} />
+                  )}
+                  {generatingId === selected.id ? 'Generating draft...' : 'Generate AI Draft'}
+                </button>
+              )}
+
+              {selectedDraft && (
+                <div className="border border-white/10 rounded-xl p-5 bg-gradient-to-br from-blue-600/5 to-purple-600/5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                      <Sparkles size={14} className="text-purple-400" />
+                      AI Draft Reply
+                    </div>
+                    <ConfidenceBadge score={selectedDraft.confidence_score} />
+                  </div>
+
+                  <p className="text-slate-200 leading-relaxed whitespace-pre-wrap mb-3">
+                    {selectedDraft.draft_body}
+                  </p>
+
+                  {selectedDraft.reasoning && (
+                    <p className="text-xs text-slate-500 italic mb-4">{selectedDraft.reasoning}</p>
+                  )}
+
+                  <button
+                    onClick={() => handleGenerateDraft(selected.id)}
+                    disabled={generatingId === selected.id}
+                    className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors disabled:opacity-50"
+                  >
+                    {generatingId === selected.id ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <RefreshCw size={12} />
+                    )}
+                    Regenerate
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <div className="m-auto text-center text-slate-500">
