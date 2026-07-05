@@ -85,6 +85,7 @@ export default function InboxClient({ initialEmails }: { initialEmails: Customer
   const [generatingId, setGeneratingId] = useState<string | null>(null);
   const [actionId, setActionId] = useState<string | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
+  const [pushSuccess, setPushSuccess] = useState<string | null>(null);
 
   const selected = emails.find((e) => e.id === selectedId) ?? null;
   const selectedDraft = selected ? drafts[selected.id] : null;
@@ -115,6 +116,7 @@ export default function InboxClient({ initialEmails }: { initialEmails: Customer
 
     setActionId(emailId);
     setDraftError(null);
+    setPushSuccess(null);
     try {
       const res = await fetch(`/api/drafts/${draft.id}`, {
         method: 'PATCH',
@@ -127,6 +129,14 @@ export default function InboxClient({ initialEmails }: { initialEmails: Customer
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? `Failed to ${action === 'approved' ? 'approve' : 'reject'} draft`);
       setDrafts((prev) => ({ ...prev, [emailId]: data.draft }));
+
+      if (action === 'approved') {
+        if (data.pushedToGmail) {
+          setPushSuccess('Draft pushed to Gmail — open Gmail to review and send.');
+        } else if (data.gmailPushError) {
+          setDraftError(data.gmailPushError);
+        }
+      }
 
       // Approving mirrors the same 'in_progress' transition the server
       // already applied to customer_emails, so the list badge stays in sync.
@@ -251,6 +261,9 @@ export default function InboxClient({ initialEmails }: { initialEmails: Customer
             <div className="mt-2">
               {draftError && (
                 <p className="text-sm text-red-400 mb-3">{draftError}</p>
+              )}
+              {pushSuccess && (
+                <p className="text-sm text-green-400 mb-3">{pushSuccess}</p>
               )}
 
               {!selectedDraft && (
