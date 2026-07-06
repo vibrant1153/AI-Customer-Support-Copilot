@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { RefreshCw, Inbox, Send } from 'lucide-react';
+import { RefreshCw, Inbox, Send, Zap } from 'lucide-react';
 
 type ReplyMode = 'hosted' | 'gmail_native';
 
@@ -16,6 +16,8 @@ export default function ReplyModeSettings({
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [automating, setAutomating] = useState(false);
+  const [automationResult, setAutomationResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleModeChange = async (mode: ReplyMode) => {
@@ -53,6 +55,24 @@ export default function ReplyModeSettings({
       setError(err instanceof Error ? err.message : 'Sync failed');
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleRunAutomation = async () => {
+    setAutomating(true);
+    setAutomationResult(null);
+    setError(null);
+    try {
+      const res = await fetch('/api/automation/run-for-org', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Automation run failed');
+      setAutomationResult(
+        `Synced ${data.imported} new email${data.imported === 1 ? '' : 's'}, drafted and pushed to Gmail for ${data.processed} of them.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Automation run failed');
+    } finally {
+      setAutomating(false);
     }
   };
 
@@ -100,6 +120,31 @@ export default function ReplyModeSettings({
           <p className="text-xs text-slate-400">Approved drafts are pushed into Gmail as replies — send from there.</p>
         </button>
       </div>
+
+      {replyMode === 'gmail_native' && (
+        <div className="border-t border-white/10 pt-5 mb-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-white flex items-center gap-1.5">
+                <Zap size={14} className="text-purple-400" />
+                Run Automation Now
+              </p>
+              <p className="text-xs text-slate-400">
+                Syncs new emails, drafts replies, pushes them to Gmail, and emails you a summary — no approval step.
+              </p>
+            </div>
+            <button
+              onClick={handleRunAutomation}
+              disabled={automating}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-[0_0_20px_rgba(79,70,229,0.4)] hover:opacity-90 transition-opacity disabled:opacity-50 flex-shrink-0"
+            >
+              <Zap size={14} className={automating ? 'animate-pulse' : ''} />
+              {automating ? 'Running...' : 'Run now'}
+            </button>
+          </div>
+          {automationResult && <p className="text-xs text-green-400 mt-3">{automationResult}</p>}
+        </div>
+      )}
 
       <div className="border-t border-white/10 pt-5">
         <div className="flex items-center justify-between">
