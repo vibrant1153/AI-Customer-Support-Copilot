@@ -23,3 +23,5 @@ export async function GET() {
   const url = getAuthUrl(profile.org_id);
   return NextResponse.redirect(url);
 }
+
+
