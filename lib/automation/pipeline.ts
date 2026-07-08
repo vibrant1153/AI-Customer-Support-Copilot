@@ -1,10 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
-import { listRecentInboxMessageIds, getParsedMessage, createDraftReply } from '@/lib/google/gmail';
+import { listRecentInboxMessageIds, getParsedMessage } from '@/lib/google/gmail';
 import { embedQuery } from '@/lib/processing/embedChunks';
 import { generateDraft } from '@/lib/ai/generateDraft';
-import { Resend } from 'resend';
-
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 /**
  * Pulls recent Gmail inbox messages for one org and inserts any not
@@ -54,17 +51,16 @@ export async function syncOrgInbox(
 }
 
 /**
- * Full headless pipeline for one email: retrieve context, generate a
- * draft, push it into Gmail as a threaded reply, and email the connected
- * inbox a notification with the confidence score. No human interaction —
- * this is the "never leave Gmail" flow.
+ * Generates a draft (with confidence score) for every new email and saves
+ * it as 'pending' — it does NOT push to Gmail or send a notification.
+ * A human reviews the confidence score and clicks Approve in Settings,
+ * which pushes to Gmail at that point (same /api/drafts/[id] route the
+ * Hosted Inbox flow already uses).
  */
 export async function processEmailAndNotify(
   admin: SupabaseClient,
   orgId: string,
-  orgName: string,
-  refreshToken: string,
-  notifyEmail: string
+  orgName: string
 ) {
   const { data: email } = await admin
     .from('customer_emails')
@@ -96,53 +92,17 @@ export async function processEmailAndNotify(
         matches ?? []
       );
 
-      // 3. Save (status starts 'pending' but nothing here waits on approval —
-      // saved mainly for record-keeping/analytics, not as a gate)
-      const { data: savedDraft } = await admin
-        .from('ai_drafts')
-        .insert({
-          email_id: e.id,
-          org_id: orgId,
-          draft_body: generated.draft,
-          confidence_score: generated.confidence,
-          reasoning: generated.reasoning,
-        })
-        .select()
-        .single();
-
-      // 4. Push into Gmail as a threaded reply
-      if (e.gmail_thread_id) {
-        await createDraftReply(refreshToken, {
-          threadId: e.gmail_thread_id,
-          toEmail: e.sender_email,
-          subject: e.subject,
-          bodyText: generated.draft,
-          inReplyToMessageIdHeader: e.gmail_message_id_header,
-        });
-      }
-
-      // 5. Mark as in_progress — a draft now exists and is waiting in Gmail
-      await admin.from('customer_emails').update({ status: 'in_progress' }).eq('id', e.id);
-
-      // 6. Notify — best-effort, doesn't block the pipeline if it fails
-      try {
-        await resend.emails.send({
-          from: 'AI Customer Support Copilot <onboarding@resend.dev>',
-          to: notifyEmail,
-          subject: `Draft ready: ${e.subject} (${generated.confidence}% confidence)`,
-          html: `
-            <p>A reply draft was generated for <strong>${e.sender_name}</strong> (${e.sender_email}) and is waiting in your Gmail.</p>
-            <p><strong>Confidence:</strong> ${generated.confidence}%</p>
-            <p><strong>Reasoning:</strong> ${generated.reasoning}</p>
-            <p>Open Gmail to review and send.</p>
-          `,
-        });
-      } catch (notifyErr) {
-        console.error('Notification email failed (draft still created):', notifyErr);
-      }
+      // 3. Save — status defaults to 'pending', which is the actual gate
+      // now. Nothing pushes to Gmail until a human approves it.
+      await admin.from('ai_drafts').insert({
+        email_id: e.id,
+        org_id: orgId,
+        draft_body: generated.draft,
+        confidence_score: generated.confidence,
+        reasoning: generated.reasoning,
+      });
 
       processed++;
-      void savedDraft; // referenced for clarity; not otherwise used here
     } catch (err) {
       console.error(`Failed to process email ${e.id}:`, err);
       // Leave this one as 'new' so a future run retries it, rather than
