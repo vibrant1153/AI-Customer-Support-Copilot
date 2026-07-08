@@ -38,15 +38,18 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith('/login') ||
     pathname.startsWith('/register');
 
-  // Not logged in, not on an auth page, not an API route → bounce to login
-  if (!user && !isAuthPage && !isApiRoute) {
+  // The marketing landing page — public, same as login/register.
+  const isLandingPage = pathname === '/';
+
+  // Not logged in, not on an auth/landing page, not an API route → bounce to login
+  if (!user && !isAuthPage && !isLandingPage && !isApiRoute) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     return NextResponse.redirect(url);
   }
 
-  // Already logged in and trying to reach login/register → send to dashboard
-  if (user && isAuthPage) {
+  // Already logged in and trying to reach login/register/landing → send to dashboard
+  if (user && (isAuthPage || isLandingPage)) {
     const url = request.nextUrl.clone();
     url.pathname = '/dashboard';
     return NextResponse.redirect(url);
