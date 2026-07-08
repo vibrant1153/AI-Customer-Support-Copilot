@@ -10,8 +10,9 @@ function getAdminClient() {
 }
 
 /**
- * Runs the full sync -> generate -> push -> notify pipeline for every
- * org currently in gmail_native mode with a connected Gmail account.
+ * Runs sync -> generate for every org currently in gmail_native mode with
+ * a connected Gmail account. Drafts are saved as 'pending' — nothing gets
+ * pushed to Gmail here; that happens when a human approves in Settings.
  *
  * This has no user session — it's meant to be called by a scheduled job
  * (e.g. Vercel Cron once deployed), not from the browser. Protected by
@@ -42,13 +43,7 @@ export async function POST(req: NextRequest) {
 
     try {
       const importedEmailIds = await syncOrgInbox(admin, org.id, connection.refresh_token);
-      const { processed } = await processEmailAndNotify(
-        admin,
-        org.id,
-        org.name,
-        connection.refresh_token,
-        connection.email_address
-      );
+      const { processed } = await processEmailAndNotify(admin, org.id, org.name);
       results.push({ orgId: org.id, imported: importedEmailIds.length, processed });
     } catch (err) {
       console.error(`Automation failed for org ${org.id}:`, err);
