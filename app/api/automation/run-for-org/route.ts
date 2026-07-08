@@ -54,13 +54,7 @@ export async function POST() {
 
   try {
     const importedEmailIds = await syncOrgInbox(admin, profile.org_id, connection.refresh_token);
-    const { processed } = await processEmailAndNotify(
-      admin,
-      profile.org_id,
-      org.name,
-      connection.refresh_token,
-      connection.email_address
-    );
+    const { processed } = await processEmailAndNotify(admin, profile.org_id, org.name);
     return NextResponse.json({ imported: importedEmailIds.length, processed });
   } catch (err) {
     console.error('Automation run failed:', err);
