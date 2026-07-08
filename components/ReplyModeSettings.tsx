@@ -67,7 +67,7 @@ export default function ReplyModeSettings({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Automation run failed');
       setAutomationResult(
-        `Synced ${data.imported} new email${data.imported === 1 ? '' : 's'}, drafted and pushed to Gmail for ${data.processed} of them.`
+        `Synced ${data.imported} new email${data.imported === 1 ? '' : 's'}, drafted ${data.processed} — review them below.`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Automation run failed');
@@ -130,7 +130,7 @@ export default function ReplyModeSettings({
                 Run Automation Now
               </p>
               <p className="text-xs text-slate-400">
-                Syncs new emails, drafts replies, pushes them to Gmail, and emails you a summary — no approval step.
+                Syncs new emails and drafts replies with a confidence score — nothing is sent until you approve below.
               </p>
             </div>
             <button
