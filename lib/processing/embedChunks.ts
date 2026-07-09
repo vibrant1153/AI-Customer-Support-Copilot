@@ -1,6 +1,11 @@
 import { GoogleGenAI } from '@google/genai';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+// Creates a client per-call using the org's own key when provided, falling
+// back to your shared GEMINI_API_KEY (used for orgs that haven't added
+// their own key yet, and for your own testing).
+function getClient(apiKey?: string) {
+  return new GoogleGenAI({ apiKey: apiKey || process.env.GEMINI_API_KEY! });
+}
 
 export interface ChunkToEmbed {
   id: string;        // document_chunks row id
@@ -17,12 +22,18 @@ export interface EmbeddedChunk {
  * taskType: RETRIEVAL_DOCUMENT tells the model these are documents to be
  * searched against later (as opposed to search queries — see retrieve-context
  * route in Phase 6, which uses RETRIEVAL_QUERY instead).
+ *
+ * apiKey: pass the org's own Gemini key (Bring Your Own Key) so usage
+ * draws from their free quota instead of yours. Falls back to your shared
+ * key if omitted.
  */
 export async function embedChunks(
-  chunks: ChunkToEmbed[]
+  chunks: ChunkToEmbed[],
+  apiKey?: string
 ): Promise<EmbeddedChunk[]> {
   if (chunks.length === 0) return [];
 
+  const ai = getClient(apiKey);
   const response = await ai.models.embedContent({
     model: 'gemini-embedding-001',
     contents: chunks.map((c) => c.content),
@@ -51,8 +62,11 @@ export async function embedChunks(
  * tunes the vector differently depending on which side of the search it's
  * embedding. Using the wrong task type still "works" but measurably hurts
  * retrieval ranking quality.
+ *
+ * apiKey: same BYOK behavior as embedChunks above.
  */
-export async function embedQuery(text: string): Promise<number[]> {
+export async function embedQuery(text: string, apiKey?: string): Promise<number[]> {
+  const ai = getClient(apiKey);
   const response = await ai.models.embedContent({
     model: 'gemini-embedding-001',
     contents: [text],
