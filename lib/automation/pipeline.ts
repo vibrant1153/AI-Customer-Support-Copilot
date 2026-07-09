@@ -28,6 +28,8 @@ export async function syncOrgInbox(
 
     const parsed = await getParsedMessage(refreshToken, gmailMessageId);
 
+    if (parsed.isLikelyBulkMail) continue; // newsletter/notification — not a real customer inquiry
+
     const { data: inserted, error: insertError } = await admin
       .from('customer_emails')
       .insert({
@@ -103,6 +105,11 @@ export async function processEmailAndNotify(
         confidence_score: generated.confidence,
         reasoning: generated.reasoning,
       });
+
+      // 4. Mark this email as drafted — critical: without this, every
+      // future automation run would re-scan this same email (still
+      // 'new') and generate a duplicate draft for it, forever.
+      await admin.from('customer_emails').update({ status: 'in_progress' }).eq('id', e.id);
 
       processed++;
     } catch (err) {

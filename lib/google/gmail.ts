@@ -74,6 +74,13 @@ export async function listRecentInboxMessageIds(refreshToken: string, maxResults
   const res = await gmail.users.messages.list({
     userId: 'me',
     labelIds: ['INBOX'],
+    // Restricts to Gmail's own "Primary" category — this is what keeps
+    // newsletters, automated notifications (Vercel, GitHub, etc.), and
+    // forum digests (Reddit) out of what gets treated as a customer
+    // support email. A real dedicated support@ inbox wouldn't have this
+    // noise in the first place, but this matters a lot when testing
+    // against a personal inbox.
+    q: 'category:primary',
     maxResults,
   });
   return (res.data.messages ?? []).map((m) => m.id!).filter(Boolean);
