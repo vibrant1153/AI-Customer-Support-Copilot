@@ -59,6 +59,8 @@ export async function POST() {
 
       const parsed = await getParsedMessage(connection.refresh_token, gmailMessageId);
 
+      if (parsed.isLikelyBulkMail) continue; // newsletter/notification — not a real customer inquiry
+
       const { error: insertError } = await admin.from('customer_emails').insert({
         org_id: profile.org_id,
         sender_name: parsed.fromName,
