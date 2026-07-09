@@ -12,13 +12,15 @@ export async function POST(req: NextRequest) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('org_id')
+    .select('org_id, organizations(gemini_api_key)')
     .eq('id', user.id)
     .single();
 
   if (!profile?.org_id) {
     return NextResponse.json({ error: 'No organization found' }, { status: 400 });
   }
+
+  const geminiApiKey = (profile.organizations as unknown as { gemini_api_key: string | null } | null)?.gemini_api_key ?? undefined;
 
   const { emailId } = await req.json();
   if (!emailId) {
@@ -42,7 +44,7 @@ export async function POST(req: NextRequest) {
   try {
     // Embed the email's subject + body together as the search query.
     const queryText = `${email.subject}\n\n${email.body}`;
-    const queryEmbedding = await embedQuery(queryText);
+    const queryEmbedding = await embedQuery(queryText, geminiApiKey);
 
     // pgvector similarity search, filtered by org_id INSIDE the SQL
     // function — see match_document_chunks in phase6-match-function.sql.
