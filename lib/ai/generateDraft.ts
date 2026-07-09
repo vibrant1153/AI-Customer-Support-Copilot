@@ -1,6 +1,8 @@
 import { GoogleGenAI, Type } from '@google/genai';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+function getClient(apiKey?: string) {
+  return new GoogleGenAI({ apiKey: apiKey || process.env.GEMINI_API_KEY! });
+}
 
 export interface GeneratedDraft {
   draft: string;
@@ -18,11 +20,16 @@ interface ContextChunk {
  * chunks as grounding. Uses Gemini 2.5 Flash — free-tier eligible, GA
  * (not preview), and well-suited to this kind of structured drafting task.
  * If a stronger model is ever needed, this is the only place to change.
+ *
+ * apiKey: pass the org's own Gemini key (Bring Your Own Key) so usage
+ * draws from their free quota instead of yours. Falls back to your shared
+ * key if omitted.
  */
 export async function generateDraft(
   orgName: string,
   customerEmail: { subject: string; body: string },
-  contextChunks: ContextChunk[]
+  contextChunks: ContextChunk[],
+  apiKey?: string
 ): Promise<GeneratedDraft> {
   const contextText = contextChunks.length
     ? contextChunks
@@ -43,6 +50,7 @@ Subject: ${customerEmail.subject}
 
 ${customerEmail.body}`;
 
+  const ai = getClient(apiKey);
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
     contents: [{ role: 'user', parts: [{ text: userMessage }] }],
