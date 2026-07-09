@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('org_id, organizations(name)')
+    .select('org_id, organizations(name, gemini_api_key)')
     .eq('id', user.id)
     .single();
 
@@ -21,8 +21,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No organization found' }, { status: 400 });
   }
 
-  const orgName =
-    (profile.organizations as unknown as { name: string } | null)?.name ?? 'our team';
+  const orgData = profile.organizations as unknown as { name: string; gemini_api_key: string | null } | null;
+  const orgName = orgData?.name ?? 'our team';
+  const geminiApiKey = orgData?.gemini_api_key ?? undefined;
 
   const { emailId } = await req.json();
   if (!emailId) {
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
   try {
     // 1. Retrieve relevant knowledge base chunks (same logic as Phase 6)
     const queryText = `${email.subject}\n\n${email.body}`;
-    const queryEmbedding = await embedQuery(queryText);
+    const queryEmbedding = await embedQuery(queryText, geminiApiKey);
 
     const { data: matches, error: matchError } = await supabase.rpc(
       'match_document_chunks',
@@ -60,7 +61,8 @@ export async function POST(req: NextRequest) {
     const generated = await generateDraft(
       orgName,
       { subject: email.subject, body: email.body },
-      matches ?? []
+      matches ?? [],
+      geminiApiKey
     );
 
     // 3. Save it — RLS insert policy scopes this to the user's own org.
