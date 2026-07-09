@@ -36,13 +36,15 @@ export async function POST(request: NextRequest) {
   // the row if it belongs to the caller's own org)
   const { data: doc, error: docError } = await supabase
     .from('documents')
-    .select('id, org_id, file_path, filename')
+    .select('id, org_id, file_path, filename, organizations(gemini_api_key)')
     .eq('id', documentId)
     .single();
 
   if (docError || !doc) {
     return NextResponse.json({ error: 'Document not found' }, { status: 404 });
   }
+
+  const geminiApiKey = (doc.organizations as unknown as { gemini_api_key: string | null } | null)?.gemini_api_key ?? undefined;
 
   // Reset to 'processing' up front — matters for retries, since this
   // document may currently be sitting at 'failed' or a stuck 'processing'.
@@ -104,7 +106,8 @@ export async function POST(request: NextRequest) {
     // background/system write triggered by the upload flow.
     const admin = getAdminClient();
     const embedded = await embedChunks(
-      savedChunks.map((c) => ({ id: c.id, content: c.content }))
+      savedChunks.map((c) => ({ id: c.id, content: c.content })),
+      geminiApiKey
     );
 
     await Promise.all(
