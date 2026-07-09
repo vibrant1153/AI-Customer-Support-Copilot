@@ -26,7 +26,7 @@ export async function POST() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('org_id, organizations(name, reply_mode)')
+    .select('org_id, organizations(name, reply_mode, gemini_api_key)')
     .eq('id', user.id)
     .single();
 
@@ -34,7 +34,7 @@ export async function POST() {
     return NextResponse.json({ error: 'No organization found' }, { status: 400 });
   }
 
-  const org = profile.organizations as unknown as { name: string; reply_mode: string } | null;
+  const org = profile.organizations as unknown as { name: string; reply_mode: string; gemini_api_key: string | null } | null;
   if (org?.reply_mode !== 'gmail_native') {
     return NextResponse.json({ error: 'Automation only applies in Gmail Native mode' }, { status: 400 });
   }
@@ -54,7 +54,7 @@ export async function POST() {
 
   try {
     const importedEmailIds = await syncOrgInbox(admin, profile.org_id, connection.refresh_token);
-    const { processed } = await processEmailAndNotify(admin, profile.org_id, org.name);
+    const { processed } = await processEmailAndNotify(admin, profile.org_id, org.name, org.gemini_api_key ?? undefined);
     return NextResponse.json({ imported: importedEmailIds.length, processed });
   } catch (err) {
     console.error('Automation run failed:', err);
