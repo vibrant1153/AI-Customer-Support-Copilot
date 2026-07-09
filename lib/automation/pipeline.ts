@@ -60,7 +60,8 @@ export async function syncOrgInbox(
 export async function processEmailAndNotify(
   admin: SupabaseClient,
   orgId: string,
-  orgName: string
+  orgName: string,
+  geminiApiKey?: string
 ) {
   const { data: email } = await admin
     .from('customer_emails')
@@ -78,7 +79,7 @@ export async function processEmailAndNotify(
     try {
       // 1. Retrieve
       const queryText = `${e.subject}\n\n${e.body}`;
-      const queryEmbedding = await embedQuery(queryText);
+      const queryEmbedding = await embedQuery(queryText, geminiApiKey);
       const { data: matches } = await admin.rpc('match_document_chunks', {
         query_embedding: queryEmbedding,
         match_org_id: orgId,
@@ -89,7 +90,8 @@ export async function processEmailAndNotify(
       const generated = await generateDraft(
         orgName,
         { subject: e.subject, body: e.body },
-        matches ?? []
+        matches ?? [],
+        geminiApiKey
       );
 
       // 3. Save — status defaults to 'pending', which is the actual gate
