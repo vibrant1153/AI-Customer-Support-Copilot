@@ -4,6 +4,7 @@ import AnimatedBackground from '@/components/AnimatedBackground';
 import Sidebar from '@/components/Sidebar';
 import ReplyModeSettings from '@/components/ReplyModeSettings';
 import PendingDraftsList from '@/components/PendingDraftsList';
+import GeminiKeySettings from '@/components/GeminiKeySettings';
 import { Mail, CheckCircle2 } from 'lucide-react';
 
 export default async function SettingsPage({
@@ -18,16 +19,17 @@ export default async function SettingsPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, org_id, organizations(name, reply_mode)')
+    .select('full_name, org_id, organizations(name, reply_mode, gemini_api_key)')
     .eq('id', user.id)
     .single();
 
   if (!profile?.org_id) redirect('/login');
 
   const userName = profile.full_name ?? 'Agent';
-  const orgData = profile.organizations as unknown as { name: string; reply_mode: 'hosted' | 'gmail_native' } | null;
+  const orgData = profile.organizations as unknown as { name: string; reply_mode: 'hosted' | 'gmail_native'; gemini_api_key: string | null } | null;
   const orgName = orgData?.name ?? 'Your Workspace';
   const replyMode = orgData?.reply_mode ?? 'hosted';
+  const hasGeminiKey = !!orgData?.gemini_api_key;
 
   const { data: connection } = await supabase
     .from('email_connections')
@@ -100,6 +102,8 @@ export default async function SettingsPage({
                 )}
               </div>
             </div>
+
+            <GeminiKeySettings hasKeySet={hasGeminiKey} />
 
             <ReplyModeSettings initialReplyMode={replyMode} gmailConnected={!!connection} />
 
