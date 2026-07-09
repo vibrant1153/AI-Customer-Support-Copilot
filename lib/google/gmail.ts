@@ -74,13 +74,6 @@ export async function listRecentInboxMessageIds(refreshToken: string, maxResults
   const res = await gmail.users.messages.list({
     userId: 'me',
     labelIds: ['INBOX'],
-    // Restricts to Gmail's own "Primary" category — this is what keeps
-    // newsletters, automated notifications (Vercel, GitHub, etc.), and
-    // forum digests (Reddit) out of what gets treated as a customer
-    // support email. A real dedicated support@ inbox wouldn't have this
-    // noise in the first place, but this matters a lot when testing
-    // against a personal inbox.
-    q: 'category:primary',
     maxResults,
   });
   return (res.data.messages ?? []).map((m) => m.id!).filter(Boolean);
@@ -126,6 +119,7 @@ export interface ParsedGmailMessage {
   subject: string;
   bodyText: string;
   messageIdHeader: string | null; // RFC822 Message-ID, needed for threading replies
+  isLikelyBulkMail: boolean; // newsletter/notification, not a real customer inquiry
 }
 
 export async function getParsedMessage(
@@ -149,6 +143,15 @@ export async function getParsedMessage(
   const fromName = match ? match[1].replace(/"/g, '').trim() : fromRaw;
   const fromEmail = match ? match[2].trim() : fromRaw;
 
+  // List-Unsubscribe is a much more reliable "this is bulk mail, not a
+  // real customer inquiry" signal than Gmail's own Primary/Promotions
+  // tabs — those tabs don't reliably sort every newsletter or automated
+  // notification out of Primary (confirmed against a real test inbox).
+  // Real customer support emails essentially never carry this header.
+  const isLikelyBulkMail =
+    findHeader(headers, 'List-Unsubscribe') !== null ||
+    findHeader(headers, 'Precedence')?.toLowerCase() === 'bulk';
+
   return {
     gmailMessageId: messageId,
     threadId: res.data.threadId ?? '',
@@ -157,6 +160,7 @@ export async function getParsedMessage(
     subject,
     bodyText: extractPlainTextBody(res.data.payload) || '(empty message)',
     messageIdHeader,
+    isLikelyBulkMail,
   };
 }
 
