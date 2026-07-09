@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
   const { data: orgs, error } = await admin
     .from('organizations')
-    .select('id, name, email_connections(refresh_token, email_address)')
+    .select('id, name, gemini_api_key, email_connections(refresh_token, email_address)')
     .eq('reply_mode', 'gmail_native');
 
   if (error) {
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     try {
       const importedEmailIds = await syncOrgInbox(admin, org.id, connection.refresh_token);
-      const { processed } = await processEmailAndNotify(admin, org.id, org.name);
+      const { processed } = await processEmailAndNotify(admin, org.id, org.name, org.gemini_api_key ?? undefined);
       results.push({ orgId: org.id, imported: importedEmailIds.length, processed });
     } catch (err) {
       console.error(`Automation failed for org ${org.id}:`, err);
