@@ -25,7 +25,13 @@ function ConfidenceBadge({ score }: { score: number }) {
   );
 }
 
-export default function PendingDraftsList({ refreshTrigger }: { refreshTrigger?: number } = {}) {
+export default function PendingDraftsList({
+  refreshTrigger,
+  onDraftActioned,
+}: {
+  refreshTrigger?: number;
+  onDraftActioned?: () => void;
+} = {}) {
   const [drafts, setDrafts] = useState<PendingDraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -71,6 +77,10 @@ export default function PendingDraftsList({ refreshTrigger }: { refreshTrigger?:
 
       // Remove it from the pending list either way — it's no longer pending
       setDrafts((prev) => prev.filter((d) => d.id !== draftId));
+
+      if (action === 'rejected') {
+        onDraftActioned?.();
+      }
     } catch (err) {
       setFeedback({
         id: draftId,
