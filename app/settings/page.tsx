@@ -2,8 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import AnimatedBackground from '@/components/AnimatedBackground';
 import Sidebar from '@/components/Sidebar';
-import ReplyModeSettings from '@/components/ReplyModeSettings';
-import PendingDraftsList from '@/components/PendingDraftsList';
+import GmailNativeSettings from '@/components/GmailNativeSettings';
 import GeminiKeySettings from '@/components/GeminiKeySettings';
 import { Mail, CheckCircle2 } from 'lucide-react';
 
@@ -105,9 +104,7 @@ export default async function SettingsPage({
 
             <GeminiKeySettings hasKeySet={hasGeminiKey} />
 
-            <ReplyModeSettings initialReplyMode={replyMode} gmailConnected={!!connection} />
-
-            {replyMode === 'gmail_native' && !!connection && <PendingDraftsList />}
+            <GmailNativeSettings initialReplyMode={replyMode} gmailConnected={!!connection} />
 
           </div>
         </main>
