@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import ReplyModeSettings from './ReplyModeSettings';
 import PendingDraftsList from './PendingDraftsList';
+import RejectedDraftsList from './RejectedDraftsList';
 
 type ReplyMode = 'hosted' | 'gmail_native';
 
@@ -14,11 +15,24 @@ export default function GmailNativeSettings({
   gmailConnected: boolean;
 }) {
   const [replyMode, setReplyMode] = useState<ReplyMode>(initialReplyMode);
-  // Bumping this forces PendingDraftsList to refetch — see its useEffect dependency.
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  // Bumping either of these forces the matching list to refetch — see
+  // each component's useEffect dependency.
+  const [pendingRefreshTrigger, setPendingRefreshTrigger] = useState(0);
+  const [rejectedRefreshTrigger, setRejectedRefreshTrigger] = useState(0);
 
   const handleAutomationComplete = useCallback(() => {
-    setRefreshTrigger((n) => n + 1);
+    setPendingRefreshTrigger((n) => n + 1);
+  }, []);
+
+  // A draft moving to 'rejected' (from PendingDraftsList) should refresh
+  // the rejected list; a draft being regenerated (from RejectedDraftsList)
+  // should refresh the pending list. They feed each other.
+  const handlePendingChanged = useCallback(() => {
+    setRejectedRefreshTrigger((n) => n + 1);
+  }, []);
+
+  const handleRegenerate = useCallback(() => {
+    setPendingRefreshTrigger((n) => n + 1);
   }, []);
 
   return (
@@ -31,7 +45,10 @@ export default function GmailNativeSettings({
       />
 
       {replyMode === 'gmail_native' && gmailConnected && (
-        <PendingDraftsList refreshTrigger={refreshTrigger} />
+        <>
+          <PendingDraftsList refreshTrigger={pendingRefreshTrigger} onDraftActioned={handlePendingChanged} />
+          <RejectedDraftsList refreshTrigger={rejectedRefreshTrigger} onRegenerate={handleRegenerate} />
+        </>
       )}
     </>
   );
