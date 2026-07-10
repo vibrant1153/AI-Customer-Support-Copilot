@@ -25,7 +25,7 @@ function ConfidenceBadge({ score }: { score: number }) {
   );
 }
 
-export default function PendingDraftsList() {
+export default function PendingDraftsList({ refreshTrigger }: { refreshTrigger?: number } = {}) {
   const [drafts, setDrafts] = useState<PendingDraft[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionId, setActionId] = useState<string | null>(null);
@@ -44,7 +44,8 @@ export default function PendingDraftsList() {
 
   useEffect(() => {
     loadDrafts();
-  }, [loadDrafts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadDrafts, refreshTrigger]);
 
   const handleAction = async (draftId: string, action: 'approved' | 'rejected') => {
     setActionId(draftId);
