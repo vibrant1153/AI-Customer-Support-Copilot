@@ -69,11 +69,19 @@ export async function getConnectedEmailAddress(accessToken: string) {
  * Gmail's watch() API + a Google Cloud Pub/Sub topic + domain verification,
  * which is real added complexity intentionally deferred for now.
  */
-export async function listRecentInboxMessageIds(refreshToken: string, maxResults = 10) {
+export async function listRecentInboxMessageIds(refreshToken: string, maxResults = 20) {
   const gmail = getGmailClientForOrg(refreshToken);
   const res = await gmail.users.messages.list({
     userId: 'me',
     labelIds: ['INBOX'],
+    // Restricts to Gmail's "Primary" category. Without this, a burst of
+    // Promotions/Social/Updates mail (which can arrive much faster than
+    // real support email) can push genuine customer emails completely
+    // outside the most-recent-N window before sync ever sees them.
+    // The List-Unsubscribe check in getParsedMessage below is a second,
+    // independent layer — it catches bulk mail that Gmail still filed
+    // under Primary despite this.
+    q: 'category:primary',
     maxResults,
   });
   return (res.data.messages ?? []).map((m) => m.id!).filter(Boolean);
