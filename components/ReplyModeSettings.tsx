@@ -8,9 +8,13 @@ type ReplyMode = 'hosted' | 'gmail_native';
 export default function ReplyModeSettings({
   initialReplyMode,
   gmailConnected,
+  onReplyModeChange,
+  onAutomationComplete,
 }: {
   initialReplyMode: ReplyMode;
   gmailConnected: boolean;
+  onReplyModeChange?: (mode: ReplyMode) => void;
+  onAutomationComplete?: () => void;
 }) {
   const [replyMode, setReplyMode] = useState<ReplyMode>(initialReplyMode);
   const [saving, setSaving] = useState(false);
@@ -34,6 +38,7 @@ export default function ReplyModeSettings({
         body: JSON.stringify({ reply_mode: mode }),
       });
       if (!res.ok) throw new Error('Failed to update reply mode');
+      onReplyModeChange?.(mode);
     } catch {
       setReplyMode(previous); // roll back
       setError('Failed to update reply mode. Please try again.');
@@ -69,6 +74,7 @@ export default function ReplyModeSettings({
       setAutomationResult(
         `Synced ${data.imported} new email${data.imported === 1 ? '' : 's'}, drafted ${data.processed} — review them below.`
       );
+      onAutomationComplete?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Automation run failed');
     } finally {
